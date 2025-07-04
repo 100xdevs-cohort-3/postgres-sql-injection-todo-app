@@ -3,6 +3,7 @@ const express = require("express");
 const {Pool} = require("pg")
 
 const pool = new Pool({
+    //REMINDER -- NEVER MAKE THIS PUBLIC
     connectionString: "postgresql://neondb_owner:npg_5AXnbWktNwm9@ep-odd-hall-a86hwjx8-pooler.eastus2.azure.neon.tech/neondb?sslmode=require&channel_binding=require"
 });
 
