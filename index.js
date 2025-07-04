@@ -1,106 +1,56 @@
+const jwt = require("jsonwebtoken")
 const express = require("express");
-const jwt = require("jsonwebtoken");
-const { CreateUserSchema, SigninUserSchema, CreateBlogSchema } = require("./types");
-const mongoose = require("mongoose");
-const { UserModel, BlogModel } = require("./models");
+const {Pool} = require("pg")
 
-mongoose.connect("your-mongo-url")
+const pool = new Pool({
+    connectionString: "postgresql://neondb_owner:npg_5AXnbWktNwm9@ep-odd-hall-a86hwjx8-pooler.eastus2.azure.neon.tech/neondb?sslmode=require&channel_binding=require"
+});
 
-const app = express()
-app.use(express.json())
-
-app.post("/signup", (req, res) => {
-    const {success, data} = CreateUserSchema.safeParse(req.body)
-
-    if (!success) {
-        return res.status(411).json({
-            message: "Incorrect inputs"
-        })
-    }
-
-    UserModel.create({
-        username: data.username,
-        password: data.password,
-        name: data.name
-    })
-
-    res.json({
-        message: "User created"
-    })
-})
-
-app.post("/signin", (req, res) => {
-    const {data, success} = SigninUserSchema.safeParse(req.body);
-    if (!success) {
-        return res.status(411).json({
-            message: "incorrect inputs"
-        })
-    }
-
-    UserModel.findOne({
-        username: data.username,
-        password: data.password
-    }).then(user => {
-        if (!user) {
-            return res.status(403).json({
-                message: "Incorrect credentials"
-            })
-        } else {
-            let token = jwt.sign(username, "secret123");
-            res.json({
-                token: token
-            })
-        }
-    })
-})
-
-app.post("/blog", (req, res) => {
-    const token = req.headers.token;
-    const username = jwt.verify(token, "secret123")
-
-    const {success, data} = CreateBlogSchema.safeParse(req.body);
-
-    if (!success) {
-        return res.status(411).json({
-            message: "Incorrect inputs"
-        })
-    } 
-    BlogModel.create({
-        title: data.title,
-        content: data.content,
-        username: username
-    })
-
-    res.json({
-        message: "Blog created"
-    })
-})
-
-app.get("/blogs", (req, res) => {
-    const token = req.headers.token;
-    const username = jwt.verify(token, "secret123")
-
-    BlogModel.findMany({
-        username: username
-    }).then(function(blogs) {
+pool.connect().then(function(conn) {
+    const app = express()
+    app.use(express.json())
+    
+    app.post("/signup", (req, res) => {
+        conn.query(`INSERT INTO users (username, password) VALUES ('${req.body.username}', '${req.body.password}');`)
+        
         res.json({
-            blogs: blogs
+            message: "User created"
         })
     })
-})
 
-app.get("/blog/:blogId", (req, res) => {
-    const token = req.headers.token;
-    const username = jwt.verify(token, "secret123")
+    app.post("/signin", function(req, res) {
+        const {username, password} = req.body;
+        let rows = conn.query(`SELECT * FROM users WHERE username='${username}' AND password='${password}'`)
+            .then(({rows}) => {
+                console.log(rows);
+                let userId = rows[0].id;
+                const token = jwt.sign(userId, "123random");
+                res.json({
+                    token
+                })  
+            });
+    })
+    app.post("/todos", function(req, res) {
+        const token = req.headers.token;
+        let userId = jwt.verify(token, "123random");
+        conn.query(`INSERT INTO blogs (title, content, user_id) VALUES ('${req.body.title}', '${req.body.content}', '${userId}');`)
 
-    BlogModel.findOne({
-        username: username,
-        _id: req.params.blogId
-    }).then(function(blog) {
         res.json({
-            blog: blog
+            message: "Todo inserted"
         })
     })
-})
+    app.get("/todos", function(req, res) {
+        const token = req.headers.token;
+        let userId = jwt.verify(token, "123random");
+        conn.query(`SELECT * FROM blogs WHERE user_id='${userId}'`)
+            .then(({rows}) => {
+                res.json({
+                    rows
+                })
+            });
+    })
 
-app.listen(3000);
+    // signin, create todos, get todos
+    
+    app.listen(3000);
+});
